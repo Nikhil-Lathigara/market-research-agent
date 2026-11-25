@@ -1,0 +1,27 @@
+[project]
+name = "market-research-agent"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Nikhil Lathigara", email = "nikhilsoni1209@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "beautifulsoup4>=4.15.0",
+    "crewai-tools[mcp]>=1.15.33",
+    "crewai[google-genai]>=1.15.33",
+    "httpx>=0.28.1",
+    "mcp[cli]>=1.28,<2",
+    "pydantic>=2.12.5",
+    "pytest>=9.2.0",
+    "python-dotenv>=1.2.4",
+    "serpapi>=1.2.0",
+]
+
+[project.scripts]
+market-research-agent = "market_research_agent:main"
+
+[build-system]
+requires = ["uv_build>=0.12.20,<0.13.0"]
+build-backend = "uv_build"
