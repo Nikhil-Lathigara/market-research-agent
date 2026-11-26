@@ -7,6 +7,9 @@ from pathlib import Path
 from crewai import Agent, Crew, LLM, Process, Task
 from dotenv import load_dotenv
 
+from tools.prompt_loader import load_prompt_config
+from tools.usage_tracker import record_agent_usage
+
 load_dotenv()
 
 # --------------------------------------------------
@@ -163,540 +166,24 @@ def validate_strategy_structure(strategy: dict):
     print("Strategy structure validation passed.")
 
 # --------------------------------------------------
-# 2. Strategy Agent
+# 2. Strategy Agent & Task from prompts/strategy.yaml
 # --------------------------------------------------
 
+prompt_cfg = load_prompt_config("strategy")
+
 strategy_agent = Agent(
-    role="Go-to-Market Strategy Specialist",
-    goal=(
-        "Develop an actionable, differentiated go-to-market strategy "
-        "grounded in supplied market research and competitive analysis."
-    ),
-    backstory=(
-        "You are a product marketing and go-to-market strategist. "
-        "You specialize in customer segmentation, positioning, "
-        "messaging, channel planning, launch execution, and KPI design. "
-        "You distinguish evidence from assumptions and do not invent "
-        "market statistics or competitor facts."
-    ),
+    role=prompt_cfg["agent"]["role"],
+    goal=prompt_cfg["agent"]["goal"],
+    backstory=prompt_cfg["agent"]["backstory"],
     llm=llm,
     verbose=True,
     allow_delegation=False,
     max_iter=8,
 )
 
-# --------------------------------------------------
-# 3. GTM Strategy Task
-# --------------------------------------------------
-
-
 strategy_task = Task(
-    description="""
-Create a comprehensive, practical Go-to-Market strategy using
-the supplied research and competitor analysis JSON.
-
-INPUT DATA:
-
-{input_data}
-
-IMPORTANT RULES:
-- Use supplied research and analysis as factual evidence.
-- Do not invent competitor facts, market statistics, prices or customer data.
-- Distinguish facts, strategic inferences and assumptions.
-- Include evidence IDs wherever factual claims are made.
-- Every evidence ID must exist in the supplied research evidence collection.
-- If information is unavailable, explicitly state the limitation.
-- Proposed targets without supporting data must be labelled provisional.
-- Recommendations must be actionable and relevant to the Indian market.
-
-==================================================
-1. IDEAL CUSTOMER PROFILES (ICPs)
-==================================================
-
-Identify meaningful customer segments.
-
-For each segment include:
-- Segment name
-- Customer characteristics
-- Needs and pain points
-- Buying motivations
-- Proposed value proposition
-- Acquisition approach
-- Evidence IDs
-- Assumptions requiring validation
-
-Avoid unsupported demographic and market-size claims.
-
-==================================================
-2. VALUE PROPOSITION AND POSITIONING
-==================================================
-
-Include:
-- Core value proposition
-- Positioning statement
-- Differentiators
-- Competitive alternatives
-- Reasons customers might choose the product
-- Evidence IDs
-- Assumptions
-
-Do not claim superiority without evidence.
-
-==================================================
-3. MESSAGING FRAMEWORK
-==================================================
-
-Include:
-- Primary message
-- At least three supporting messages
-- Target audience for each message
-- Call to action
-- Evidence IDs
-- Assumptions
-
-Avoid unsupported employment, accuracy or performance guarantees.
-
-==================================================
-4. CHANNEL STRATEGY
-==================================================
-
-Evaluate relevant acquisition and distribution channels.
-
-Consider, where appropriate:
-- SEO and educational content
-- Digital review and comparison websites
-- LinkedIn and developer communities
-- YouTube and technical demonstrations
-- College and placement-cell partnerships
-- Referral and affiliate programs
-- Freemium and trial-credit onboarding
-- Paid acquisition
-
-Select channels based on the supplied research.
-Do not include irrelevant channels merely to increase the count.
-
-For each selected channel include:
-- Channel
-- Target audience
-- Purpose
-- Activities
-- Funnel stage
-- KPI
-- Priority: high, medium or low
-- Reasoning
-- Evidence IDs
-- Assumptions
-
-Clearly label strategic hypotheses.
-
-==================================================
-5. SWOT ANALYSIS
-==================================================
-
-Produce a complete SWOT analysis.
-
-Include four separate categories:
-
-STRENGTHS:
-Internal product or business advantages supported by the inputs.
-
-WEAKNESSES:
-Internal limitations, capability gaps or constraints.
-
-OPPORTUNITIES:
-External market opportunities supported by research or clearly
-labelled strategic inferences.
-
-THREATS:
-External competition, market uncertainty and other relevant risks.
-
-For every item include:
-- Description
-- Business implication
-- Evidence IDs, if applicable
-- Assumptions, if applicable
-
-Do not present an unverified assumption as a proven fact.
-
-==================================================
-6. MARKETING MIX: 7Ps
-==================================================
-
-Create a complete 7P marketing mix.
-
-Include:
-
-1. Product:
-   Product offering, core features and customer benefits.
-
-2. Price:
-   Proposed pricing approaches, competitor context and
-   pricing validation requirements.
-
-3. Place:
-   Distribution, platform access and acquisition touchpoints.
-
-4. Promotion:
-   Content, campaigns, partnerships and promotional messaging.
-
-5. People:
-   Relevant customer support, product, marketing and
-   operational responsibilities.
-
-6. Process:
-   User onboarding, mock interview experience, payment,
-   feedback and retention processes.
-
-7. Physical Evidence:
-   Trust signals such as product demonstrations, testimonials,
-   sample reports, reviews and website experience.
-
-For each P include:
-- Strategy
-- Recommended activities
-- Expected outcome
-- Evidence IDs, if applicable
-- Assumptions
-
-Do not invent existing product features or customer testimonials.
-
-==================================================
-7. LAUNCH PLAN
-==================================================
-
-Create a phased launch roadmap with FOUR phases:
-
-Phase 1: Foundation and Validation
-Phase 2: Initial Launch and Acquisition
-Phase 3: Conversion and Optimization
-Phase 4: Growth and Retention
-
-Adapt the phase activities to the actual product and market.
-
-For each phase include:
-- Phase name
-- Duration
-- Objective
-- Activities
-- Deliverables
-- Success metrics
-- Dependencies
-- Risks
-- Suggested owner or responsible function
-
-Use relative timelines such as Weeks 1-2.
-
-Do not invent launch dates, budgets or team commitments.
-
-Label unsupported numerical targets as provisional.
-
-==================================================
-8. PRICING STRATEGY
-==================================================
-
-Include:
-- Observed competitor pricing
-- Pricing evidence and source limitations
-- Potential pricing approaches
-- INR localization considerations
-- Subscription and credit-based options where relevant
-- Willingness-to-pay experiments
-- Unknowns
-- Evidence IDs
-- Assumptions
-
-Never invent competitor pricing.
-
-==================================================
-9. MEASUREMENT FRAMEWORK
-==================================================
-
-Include KPIs for ALL SIX funnel stages:
-
-1. Awareness
-2. Acquisition
-3. Activation
-4. Engagement
-5. Conversion
-6. Retention
-
-Provide at least one relevant KPI for each stage.
-
-For each KPI include:
-- KPI name
-- Funnel stage
-- Definition
-- Measurement method
-- Proposed target or baseline requirement
-- Target basis: evidence_based or provisional
-- Reasoning
-
-Do not present provisional targets as actual performance.
-
-==================================================
-10. RISKS AND MITIGATIONS
-==================================================
-
-Include relevant risks involving:
-- Competition
-- Pricing and affordability
-- Product-market fit
-- Customer acquisition
-- Product reliability
-- Trust and user adoption
-- Research uncertainty
-
-For each include:
-- Risk
-- Impact
-- Likelihood: high, medium or low
-- Mitigation
-- Evidence IDs, if applicable
-
-==================================================
-11. EXPERIMENTS
-==================================================
-
-Recommend actionable experiments.
-
-For each include:
-- Hypothesis
-- Method
-- Target segment
-- Success criteria
-- Metrics
-- Assumptions
-
-Prioritize experiments that validate important business uncertainties.
-
-==================================================
-12. EVIDENCE LIMITATIONS
-==================================================
-
-Document:
-- Missing competitor information
-- Unverified pricing
-- Weak or secondary sources
-- Research gaps
-- Assumptions requiring primary research
-
-==================================================
-OUTPUT FORMAT
-==================================================
-
-Return ONE valid JSON object using this exact structure:
-
-{
-  "generated_at": "ISO 8601 timestamp",
-  "market": "string",
-  "executive_summary": "string",
-
-  "ideal_customer_profiles": [
-    {
-      "segment": "string",
-      "characteristics": ["string"],
-      "pain_points": ["string"],
-      "buying_motivations": ["string"],
-      "value_proposition": "string",
-      "acquisition_approach": ["string"],
-      "evidence_ids": ["E001"],
-      "assumptions": ["string"]
-    }
-  ],
-
-  "positioning": {
-    "value_proposition": "string",
-    "positioning_statement": "string",
-    "differentiators": ["string"],
-    "competitive_alternatives": ["string"],
-    "evidence_ids": ["E001"],
-    "assumptions": ["string"]
-  },
-
-  "messaging_framework": {
-    "primary_message": "string",
-    "supporting_messages": [
-      {
-        "message": "string",
-        "audience": "string",
-        "call_to_action": "string",
-        "evidence_ids": ["E001"],
-        "assumptions": ["string"]
-      }
-    ]
-  },
-
-  "channel_strategy": [
-    {
-      "channel": "string",
-      "target_audience": "string",
-      "purpose": "string",
-      "activities": ["string"],
-      "funnel_stage": "string",
-      "kpi": "string",
-      "priority": "high, medium, or low",
-      "reasoning": "string",
-      "evidence_ids": ["E001"],
-      "assumptions": ["string"]
-    }
-  ],
-
-  "swot_analysis": {
-    "strengths": [
-      {
-        "description": "string",
-        "business_implication": "string",
-        "evidence_ids": ["E001"],
-        "assumptions": ["string"]
-      }
-    ],
-    "weaknesses": [
-      {
-        "description": "string",
-        "business_implication": "string",
-        "evidence_ids": ["E001"],
-        "assumptions": ["string"]
-      }
-    ],
-    "opportunities": [
-      {
-        "description": "string",
-        "business_implication": "string",
-        "evidence_ids": ["E001"],
-        "assumptions": ["string"]
-      }
-    ],
-    "threats": [
-      {
-        "description": "string",
-        "business_implication": "string",
-        "evidence_ids": ["E001"],
-        "assumptions": ["string"]
-      }
-    ]
-  },
-
-  "marketing_mix_7p": {
-    "product": {
-      "strategy": "string",
-      "activities": ["string"],
-      "expected_outcome": "string",
-      "evidence_ids": ["E001"],
-      "assumptions": ["string"]
-    },
-    "price": {
-      "strategy": "string",
-      "activities": ["string"],
-      "expected_outcome": "string",
-      "evidence_ids": ["E001"],
-      "assumptions": ["string"]
-    },
-    "place": {
-      "strategy": "string",
-      "activities": ["string"],
-      "expected_outcome": "string",
-      "evidence_ids": ["E001"],
-      "assumptions": ["string"]
-    },
-    "promotion": {
-      "strategy": "string",
-      "activities": ["string"],
-      "expected_outcome": "string",
-      "evidence_ids": ["E001"],
-      "assumptions": ["string"]
-    },
-    "people": {
-      "strategy": "string",
-      "activities": ["string"],
-      "expected_outcome": "string",
-      "evidence_ids": ["E001"],
-      "assumptions": ["string"]
-    },
-    "process": {
-      "strategy": "string",
-      "activities": ["string"],
-      "expected_outcome": "string",
-      "evidence_ids": ["E001"],
-      "assumptions": ["string"]
-    },
-    "physical_evidence": {
-      "strategy": "string",
-      "activities": ["string"],
-      "expected_outcome": "string",
-      "evidence_ids": ["E001"],
-      "assumptions": ["string"]
-    }
-  },
-
-  "pricing_strategy": {
-    "observed_competitor_pricing": ["string"],
-    "potential_approaches": ["string"],
-    "validation_experiments": ["string"],
-    "unknowns": ["string"],
-    "evidence_ids": ["E001"],
-    "assumptions": ["string"]
-  },
-
-  "launch_plan": [
-    {
-      "phase": "string",
-      "duration": "string",
-      "objective": "string",
-      "activities": ["string"],
-      "deliverables": ["string"],
-      "success_metrics": ["string"],
-      "dependencies": ["string"],
-      "risks": ["string"],
-      "owner": "string"
-    }
-  ],
-
-  "measurement_framework": [
-    {
-      "kpi": "string",
-      "funnel_stage": "string",
-      "definition": "string",
-      "measurement_method": "string",
-      "target": "string",
-      "target_basis": "evidence_based or provisional",
-      "reasoning": "string"
-    }
-  ],
-
-  "risks_and_mitigations": [
-    {
-      "risk": "string",
-      "impact": "string",
-      "likelihood": "high, medium, or low",
-      "mitigation": "string",
-      "evidence_ids": ["E001"]
-    }
-  ],
-
-  "experiments": [
-    {
-      "hypothesis": "string",
-      "method": "string",
-      "target_segment": "string",
-      "success_criteria": "string",
-      "metrics": ["string"],
-      "assumptions": ["string"]
-    }
-  ],
-
-  "evidence_limitations": ["string"]
-}
-
-Return JSON only.
-Do not use Markdown fences.
-Do not add commentary outside the JSON.
-""",
-    expected_output=(
-        "A comprehensive, valid JSON GTM strategy including ICPs, "
-        "positioning, messaging, channel strategy, SWOT, 7P marketing "
-        "mix, pricing, four-phase launch plan, six-stage KPI framework, "
-        "risks, experiments and evidence limitations."
-    ),
+    description=prompt_cfg["task"]["description"],
+    expected_output=prompt_cfg["task"]["expected_output"],
     agent=strategy_agent,
 )
 
@@ -720,6 +207,13 @@ result = crew.kickoff(
 duration_seconds = round(
     time.perf_counter() - start_time,
     2,
+)
+
+record_agent_usage(
+    agent_name="Strategy Agent",
+    model_name=llm.model,
+    crew_output=result,
+    duration_seconds=duration_seconds,
 )
 
 raw_output = str(result).strip()
@@ -750,16 +244,13 @@ try:
     generated_at = datetime.now(timezone.utc).isoformat()
 
     strategy["generated_at"] = generated_at
-
-    
-    
     strategy["run_metadata"] = {
-    "generated_at": generated_at,
-    "duration_seconds": duration_seconds,
-    "model": "gemini/gemini-3.5-flash-lite",
-    "research_input": str(RESEARCH_FILE),
-    "analysis_input": str(ANALYSIS_FILE),
-}
+        "generated_at": generated_at,
+        "duration_seconds": duration_seconds,
+        "model": "gemini/gemini-3.5-flash-lite",
+        "research_input": str(RESEARCH_FILE),
+        "analysis_input": str(ANALYSIS_FILE),
+    }
 
     OUTPUT_FILE.write_text(
         json.dumps(

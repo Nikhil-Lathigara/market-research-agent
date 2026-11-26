@@ -7,6 +7,9 @@ from pathlib import Path
 from crewai import Agent, Crew, LLM, Process, Task
 from dotenv import load_dotenv
 
+from tools.prompt_loader import load_prompt_config
+from tools.usage_tracker import record_agent_usage
+
 load_dotenv()
 
 # --------------------------------------------------
@@ -50,260 +53,24 @@ llm = LLM(
 )
 
 # --------------------------------------------------
-# 2. Analyst Agent
+# 2. Analyst Agent & Task from prompts/analyst.yaml
 # --------------------------------------------------
 
+prompt_cfg = load_prompt_config("analyst")
+
 analyst_agent = Agent(
-    role="Market Intelligence Analyst",
-    goal=(
-        "Transform research evidence into a traceable competitor "
-        "analysis and actionable market insights."
-    ),
-    backstory=(
-        "You are a market intelligence analyst specializing in "
-        "competitive positioning, product strategy, pricing analysis, "
-        "SWOT, and marketing frameworks. You distinguish verified "
-        "facts from analytical inferences and never invent evidence."
-    ),
+    role=prompt_cfg["agent"]["role"],
+    goal=prompt_cfg["agent"]["goal"],
+    backstory=prompt_cfg["agent"]["backstory"],
     llm=llm,
     verbose=True,
     allow_delegation=False,
     max_iter=8,
 )
 
-# --------------------------------------------------
-# 3. Analysis Task
-# --------------------------------------------------
-
 analysis_task = Task(
-    description="""
-Analyze the supplied market research JSON.
-
-RESEARCH DATA:
-{research_data}
-
-YOUR RESPONSIBILITIES
-
-1. COMPETITOR COMPARISON
-
-- Compare all competitors using only supplied research.
-- Include target users, features, differentiators and pricing.
-- Every factual competitor claim must reference relevant evidence IDs.
-- Do not invent features, customer numbers, market share or capabilities.
-- If information is unavailable, write "unknown".
-- Preserve the distinction between verified facts and inferences.
-
-2. PRICING MATRIX
-
-For every competitor, provide:
-- Competitor name
-- Pricing description
-- Currency
-- Pricing source URL
-- Verification status
-- Supporting evidence IDs
-
-Rules:
-- Preserve the original price, billing period and plan details.
-- Never infer a price from incomplete information.
-- Do not infer credit quantities from subscription prices.
-- Do not describe secondary-source pricing as independently verified.
-- Use "verified" only when the supplied evidence directly supports
-  the pricing claim through a primary source.
-- Use "unverified" when pricing is based on secondary sources or
-  incomplete evidence.
-- Use "unknown" when pricing cannot be established.
-- Do not treat unknown pricing as free.
-
-Specific evidence cautions:
-- CoPrep AI evidence E002 supports a $29 Starter plan.
-  Do not add 150 credits unless the supplied evidence explicitly
-  establishes that quantity.
-- CoPrep AI evidence E007 supports 20 free credits.
-- Hello Interview evidence E006 is secondary-source evidence.
-  Treat its pricing as unverified.
-- Final Round AI evidence E005 is secondary-source evidence.
-  Treat its pricing as unverified.
-- AceInterview pricing is unknown unless new evidence is supplied.
-
-3. SWOT ANALYSIS
-
-Build a SWOT for the proposed market offering, not a list of
-competitor characteristics.
-
-STRENGTHS:
-- Internal advantages of the proposed product.
-- Only include established product capabilities or resources
-  when the supplied research establishes them.
-- Do not claim competitor capabilities as our strengths.
-
-WEAKNESSES:
-- Internal limitations of the proposed product.
-- Do not classify competitor pricing or competitor limitations
-  as our own weaknesses.
-- If product-specific information is unavailable, return an
-  empty array rather than inventing weaknesses.
-
-OPPORTUNITIES:
-- External market gaps and potential areas for differentiation.
-- Clearly distinguish evidence-backed findings from hypotheses.
-- Localized INR pricing may be an opportunity, but do not claim
-  proven willingness to pay without supporting research.
-
-THREATS:
-- External competitive, market and technology risks.
-- Competitor capabilities, established brands and pricing pressure
-  can be considered here when supported by evidence.
-
-For each SWOT item:
-- Include finding.
-- Include type: "evidence" or "inference".
-- Include relevant evidence IDs.
-- Never invent evidence IDs.
-- An inference must not be represented as a verified fact.
-
-4. MARKETING MIX
-
-Analyze all 7Ps.
-
-4P:
-- Product
-- Price
-- Place
-- Promotion
-
-Additional 3P:
-- People
-- Process
-- Physical Evidence
-
-Distinguish current market observations from proposed
-recommendations. Do not claim that our proposed product already
-has features, customers, testimonials, partnerships or applications
-that have not been established.
-
-5. MARKET OPPORTUNITIES
-
-For each opportunity:
-- Provide a descriptive title.
-- Explain the reasoning.
-- Set type to "evidence" or "inference".
-- Include supporting evidence IDs.
-- Include validation_needed actions.
-
-Potential opportunities may include:
-- Localized INR pricing.
-- Credit-based pricing.
-- Preparation paths for Indian service companies.
-- Preparation paths for Indian product companies.
-- If an opportunity is a hypothesis derived from secondary research,
-  classify it as "inference", not "evidence".
-- Use "evidence" only when the supplied sources directly establish
-  the opportunity being claimed.
-
-- Clearly label proposed product capabilities as proposed.
-- Never imply that proposed capabilities are already implemented.
-These are hypotheses unless the supplied evidence establishes
-actual demand.
-
-6. RESEARCH QUALITY
-
-Identify:
-- Missing primary sources.
-- Incomplete competitor pricing.
-- Missing Indian market data.
-- Claims supported only by secondary sources.
-- Missing customer demand and willingness-to-pay evidence.
-
-Do not assume that a URL is reliable merely because it exists.
-
-7. EVIDENCE RULES
-
-- Use only evidence IDs from the supplied evidence collection.
-- Every factual competitor claim must reference relevant evidence.
-- Do not attach an unrelated evidence ID just to support an inference.
-- If no relevant evidence exists, use an empty evidence_ids array.
-- Clearly distinguish primary and secondary sources.
-- A source's existence does not prove that it supports a claim.
-- Do not claim independent source verification unless established
-  by the supplied evidence.
-
-OUTPUT FORMAT
-
-Return one valid JSON object with this structure:
-
-{
-  "analysis_timestamp": "ISO 8601 timestamp",
-  "market": "string",
-  "competitor_comparison": [
-    {
-      "competitor": "string",
-      "target_users": "string or unknown",
-      "key_features": ["string"],
-      "pricing": "string or unknown",
-      "differentiators": ["string"],
-      "evidence_ids": ["E001"],
-      "limitations": ["string"]
-    }
-  ],
-  "pricing_matrix": [
-    {
-      "competitor": "string",
-      "pricing_description": "string or unknown",
-      "currency": "string or unknown",
-      "pricing_source": "URL or null",
-      "verification_status": "verified or unverified or unknown",
-      "evidence_ids": ["E001"]
-    }
-  ],
-  "swot_analysis": {
-    "strengths": [
-      {
-        "finding": "string",
-        "type": "evidence or inference",
-        "evidence_ids": ["E001"]
-      }
-    ],
-    "weaknesses": [],
-    "opportunities": [],
-    "threats": []
-  },
-  "marketing_mix_4p": {
-    "product": "string",
-    "price": "string",
-    "place": "string",
-    "promotion": "string"
-  },
-  "marketing_mix_7p": {
-    "people": "string",
-    "process": "string",
-    "physical_evidence": "string"
-  },
-  "market_opportunities": [
-    {
-      "opportunity": "string",
-      "reasoning": "string",
-      "type": "evidence or inference",
-      "evidence_ids": ["E001"],
-      "validation_needed": ["string"]
-    }
-  ],
-  "research_gaps": ["string"],
-  "limitations": ["string"]
-}
-
-IMPORTANT:
-- Return JSON only.
-- Do not include Markdown fences.
-- Do not invent information to fill empty sections.
-- Preserve all four competitors when they are present in research.
-- Empty arrays are acceptable when evidence is insufficient.
-""",
-    expected_output=(
-        "A valid JSON analysis report containing competitor comparison, "
-        "pricing matrix, SWOT, 4P/7P analysis, market opportunities, "
-        "research gaps, and evidence references."
-    ),
+    description=prompt_cfg["task"]["description"],
+    expected_output=prompt_cfg["task"]["expected_output"],
     agent=analyst_agent,
 )
 
@@ -360,6 +127,13 @@ result = crew.kickoff(
 duration_seconds = round(
     time.perf_counter() - start_time,
     2,
+)
+
+record_agent_usage(
+    agent_name="Analyst Agent",
+    model_name=llm.model,
+    crew_output=result,
+    duration_seconds=duration_seconds,
 )
 
 raw_output = str(result).strip()

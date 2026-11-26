@@ -36,7 +36,6 @@ URL_FIELD_NAMES = {
     "link",
     "href",
     "source_link",
-    "source_url",
     "citation_url",
 }
 

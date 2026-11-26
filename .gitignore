@@ -9,11 +9,15 @@ wheels/
 # Virtual environments
 .venv
 
+# Secrets & credentials
 .env
+credentials/
+GOCSPX-*
 
-# Local research artifacts
+# Local research artifacts & logs
 .crewai/
 logs/
 outputs/
+screenshots/*.png
 .pytest_cache/
 capstoneprojectproblemstatement.pdf

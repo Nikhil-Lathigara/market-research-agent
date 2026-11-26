@@ -314,3 +314,44 @@ Apply competitor continuity instructions in `main.py` and `research_task`, rerun
 - Build automated tests and evaluation: mock tool tests, evidence/claim validation, repeat-run consistency, and human rubric.
 - Then implement the n8n version and compare it with CrewAI.
 - Preserve current architecture and outputs; do not delete or restructure files without approval.
+
+
+---
+
+## 14. CrewAI Capstone Completion Update — 2026-11-25
+
+### Requirement Status Summary
+
+| Requirement | Status | Notes |
+| :--- | :--- | :--- |
+| Four-agent CrewAI pipeline (`main.py`, `analyst.py`, `strategy.py`, `head_planner.py`) | **Complete** | Preserved existing architecture and `gemini/gemini-3.5-flash-lite` model |
+| Pipeline retries & exponential backoff (`run_pipeline.py`) | **Complete** | `MAX_STAGE_ATTEMPTS=2`, `RETRY_BASE_DELAY=2`, permanent config error skip, freshness & JSON checks |
+| Token usage & API cost tracking (`tools/usage_tracker.py`, `pricing_config.json`) | **Complete** | Captures `CrewOutput.token_usage`, writes `outputs/usage_report.json`, checks budget threshold |
+| Scenario tests & reproducibility (`tools/scenario_evaluator.py`) | **Complete** | 3 fixed briefs, golden-output checks, normalized repeat-run consistency (`outputs/scenario_test_report.json`) |
+| Google Docs export (`export_docs.py`, `outputs/export_report.json`) | **Blocked (Missing OAuth Credentials)** | Implemented with graceful skip and setup instructions when `credentials/google_oauth_client.json` is absent |
+| CrewAI chatbot demo (`app.py`) | **Complete (Screenshots Pending Interactive Launch)** | Streamlit UI reusing `run_pipeline.py` with custom brief input, stage progress, token/cost metrics, and file downloads |
+| Project documentation (`README.md`) | **Complete** | 20-section guide with PowerShell commands, setup, architecture, troubleshooting, and evaluation methodology |
+| n8n workflow & CrewAI vs. n8n comparison | **Pending** | Next phase after CrewAI sign-off |
+
+### Files Created
+- `pricing_config.json`
+- `tools/usage_tracker.py`
+- `tools/scenario_evaluator.py`
+- `outputs/scenario_test_report.json`
+- `outputs/export_report.json`
+- `export_docs.py`
+- `app.py`
+- `screenshots/.gitkeep`
+- `tests/test_pipeline_retries.py`
+- `tests/test_usage_tracker.py`
+- `tests/test_scenarios.py`
+- `tests/test_export_docs.py`
+
+### Files Modified
+- `run_pipeline.py` (retries, exponential backoff, exit status, usage report init & budget warning)
+- `main.py` (`MARKET_BRIEF_OVERRIDE` support + `record_agent_usage`)
+- `analyst.py` (`record_agent_usage`)
+- `strategy.py` (`record_agent_usage`)
+- `head_planner.py` (`record_agent_usage` + rupee symbol/wording sanitization)
+- `README.md` (full documentation)
+- `progress.md` (this update)

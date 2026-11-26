@@ -6,6 +6,9 @@ from pathlib import Path
 from dotenv import load_dotenv
 from crewai import Agent, Crew, LLM, Process, Task
 
+from tools.prompt_loader import load_prompt_config
+from tools.usage_tracker import record_agent_usage
+
 
 # --------------------------------------------------
 # 1. Setup
@@ -79,127 +82,23 @@ def load_pipeline_outputs() -> dict:
 
 
 # --------------------------------------------------
-# 3. Define the Head Planner Agent
+# 3. Define the Head Planner Agent & Task from prompts/head_planner.yaml
 # --------------------------------------------------
 
+prompt_cfg = load_prompt_config("head_planner")
+
 head_planner = Agent(
-    role="Head Planner and Market Research Report Editor",
-    goal=(
-        "Combine the research evidence, competitive analysis, and GTM strategy "
-        "into a clear, consistent, evidence-based market research report."
-    ),
-    backstory=(
-        "You are a senior market research lead responsible for reviewing "
-        "the work of research analysts and GTM strategists. You turn their "
-        "structured outputs into a decision-ready report for business leaders. "
-        "You preserve source URLs, identify evidence limitations, distinguish "
-        "verified findings from recommendations, and never invent facts."
-    ),
+    role=prompt_cfg["agent"]["role"],
+    goal=prompt_cfg["agent"]["goal"],
+    backstory=prompt_cfg["agent"]["backstory"],
     llm=llm,
     verbose=True,
     allow_delegation=False,
 )
 
-
-# --------------------------------------------------
-# 4. Define the report-generation task
-# --------------------------------------------------
-
 report_task = Task(
-    description="""
-You are given three completed pipeline outputs:
-
-1. Research evidence
-2. Competitive and market analysis
-3. Go-to-market strategy
-
-INPUT DATA:
-{pipeline_data}
-
-Create a comprehensive, professional Markdown report.
-
-Use the following sections:
-
-# Market Research and Go-to-Market Plan
-
-## 1. Executive Summary
-Summarize the opportunity, important findings, and recommended direction.
-
-## 2. Research Scope and Methodology
-Explain the information available in the supplied research data.
-Do not claim that additional research or verification occurred.
-
-## 3. Market Research Findings
-Summarize the main findings supported by the research evidence.
-
-## 4. Competitor Landscape
-Compare the identified competitors using the supplied analysis.
-Include a comparison table where the available data supports one.
-
-## 5. Competitive Pricing Analysis
-Summarize pricing information.
-Clearly label missing prices, estimates, and unavailable data.
-Never invent a competitor's price.
-
-## 6. SWOT Analysis
-Present strengths, weaknesses, opportunities, and threats using the
-available analysis. Do not present assumptions as verified facts.
-
-## 7. Marketing Mix
-Include the 4Ps or 7Ps available in the supplied analysis.
-Do not invent missing components.
-
-## 8. Ideal Customer Profiles
-Summarize the target customer segments from the GTM strategy.
-
-## 9. Positioning and Value Proposition
-Present the recommended positioning, differentiators, and value proposition.
-
-## 10. Messaging Strategy
-Summarize the proposed messaging and supporting points.
-
-## 11. Channel Strategy
-Explain the recommended marketing and acquisition channels.
-
-## 12. Launch Plan
-Organize the proposed launch activities into phases.
-Use only timelines and milestones supported by the strategy.
-If timing is not provided, label any suggested sequencing as a recommendation.
-
-## 13. KPIs and Experiments
-Present the proposed success metrics and experiments.
-
-## 14. Risks and Mitigations
-Summarize the risks and corresponding mitigation plans.
-
-## 15. Evidence and Source Register
-Include source URLs from the research evidence.
-Preserve the URLs exactly as provided.
-Where possible, connect findings to their evidence IDs and sources.
-
-## 16. Limitations and Items Requiring Verification
-Identify missing information, unsupported claims, uncertain pricing,
-and any important evidence gaps.
-
-STRICT RULES:
-- Treat the supplied JSON files as the source of truth for this report.
-- Do not invent statistics, market sizes, competitor details, prices,
-  citations, or source URLs.
-- Preserve the distinction between facts, estimates, assumptions,
-  and strategic recommendations.
-- Keep source URLs attached to the findings they support wherever possible.
-- If the inputs disagree, explicitly flag the disagreement instead of
-  silently choosing one version.
-- Do not claim that a URL is working or that a source is authoritative
-  unless that information is established by the inputs.
-- Do not expose API keys, environment variables, or secrets.
-- Return the complete report in Markdown, without wrapping it in a code block.
-""",
-    expected_output=(
-        "A complete Markdown market research and GTM report with the requested "
-        "sections, evidence URLs, competitor comparisons, recommendations, "
-        "and a clear limitations section."
-    ),
+    description=prompt_cfg["task"]["description"],
+    expected_output=prompt_cfg["task"]["expected_output"],
     agent=head_planner,
 )
 
@@ -233,6 +132,11 @@ def main():
     )
 
     report_content = result.raw.strip()
+    report_content = report_content.replace("â‚¹", "₹")
+    report_content = report_content.replace(
+        "clandestine interview assistance",
+        "real-time interview assistance",
+    )
 
     if not report_content:
         raise ValueError("The Head Planner returned an empty report.")
@@ -245,6 +149,13 @@ def main():
     )
 
     duration = time.perf_counter() - start_time
+
+    record_agent_usage(
+        agent_name="Head Planner Agent",
+        model_name=llm.model,
+        crew_output=result,
+        duration_seconds=duration,
+    )
 
     print("\n" + "=" * 50)
     print("HEAD PLANNER COMPLETED")
